@@ -1,0 +1,18 @@
+<Project>
+
+  <!--
+    AutoMapper is pinned to 14.0.0, the last version under the MIT licence
+    (15+ needs a commercial licence key). NuGet flags 14.0.0 with
+    GHSA-rvv3-g6hj-g44x: a stack overflow when mapping a self-referencing
+    object graph roughly 25,000 levels deep.
+    It cannot be reached through this API:
+      - no DTO in the project references its own type
+      - System.Text.Json rejects request bodies nested deeper than 64 levels
+    So the warning is suppressed for this one advisory only. Any other
+    vulnerability in any package will still be reported on build.
+  -->
+  <ItemGroup>
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-rvv3-g6hj-g44x" />
+  </ItemGroup>
+
+</Project>
