@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using NLog.Web;
+using BudgetFlow.API.Extensions;
 using BudgetFlow.API.Middleware;
 using BudgetFlow.Core.Common;
 using BudgetFlow.Core.Interfaces.Repositories;
@@ -21,15 +22,31 @@ using BudgetFlow.Service.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Hosts such as Render say which port to listen on through PORT; locally the launch profile decides
+var port = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrEmpty(port))
+    builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+
 // Logging through NLog (rules and files in nlog.config) instead of the default providers
 builder.Logging.ClearProviders();
 builder.Host.UseNLog();
 
 // Add services to the container.
 
-// The connection string comes from configuration (User Secrets in development), never from code
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
+// The connection string comes from configuration (User Secrets in development, an environment
+// variable in production), never from code. A postgresql:// URL is accepted too.
+var connectionString = PostgresConnectionString.Normalize(builder.Configuration.GetConnectionString("Default"));
+builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
+
+// CORS: the browser lets a client on another address (the React site) call this API only if the
+// API names that address. Cors:AllowedOrigins is a comma-separated list; empty = no other site.
+var allowedOrigins = (builder.Configuration["Cors:AllowedOrigins"] ?? string.Empty)
+    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+    .Select(origin => origin.TrimEnd('/'))
+    .ToArray();
+builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
+    policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod()
+        .WithExposedHeaders(CorrelationIdMiddleware.HeaderName)));
 
 // Settings from appsettings.json (+ User Secrets for Jwt:Key), read through IOptions<T>
 builder.Services.Configure<BudgetSettings>(builder.Configuration.GetSection(BudgetSettings.SectionName));
@@ -135,7 +152,15 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
-// Demo data: switched on by "SeedDemoData": true (appsettings.Development.json).
+// Create or update the tables on startup, so a fresh database (e.g. on Render) needs no manual
+// "dotnet ef database update". Applying migrations that already ran does nothing.
+using (var scope = app.Services.CreateScope())
+{
+    await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
+}
+
+// Demo data: switched on by "SeedDemoData": true (appsettings.Development.json, or the
+// SeedDemoData environment variable on the host).
 // DbSeeder only fills an EMPTY database, so restarting the server never duplicates rows.
 if (app.Configuration.GetValue<bool>("SeedDemoData"))
 {
@@ -153,14 +178,15 @@ app.UseMiddleware<ExceptionHandlingMiddleware>();
 // Second: a new CorrelationId for every request, in the response header and in every log line of the request
 app.UseMiddleware<CorrelationIdMiddleware>();
 
-if (app.Environment.IsDevelopment())
-{
-    // Middleware, not endpoints, so the "login required" fallback policy does not apply to them
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+// In every environment, so the deployed demo can be tried from /swagger as well.
+// Middleware, not endpoints, so the "login required" fallback policy does not apply to them.
+app.UseSwagger();
+app.UseSwaggerUI();
 
 app.UseHttpsRedirection();
+
+// Before authentication, so the browser's preflight (OPTIONS) request is answered without a token
+app.UseCors();
 
 // Order matters: first find out who the caller is, then check what she may do
 app.UseAuthentication();

@@ -87,24 +87,35 @@ powershell -ExecutionPolicy Bypass -File scripts\race-demo.ps1
    The server refuses to start if `Jwt:Key` is missing or shorter than 32 bytes. Outside Development,
    supply the same keys as environment variables (`ConnectionStrings__Default`, `Jwt__Key`).
 
-3. **Database:**
-
-   ```powershell
-   dotnet ef database update --project BudgetFlow.Data --startup-project BudgetFlow.API
-   ```
-
-4. **Run** with the `http` (or `https`) profile, so the environment is `Development`:
+3. **Run** with the `http` (or `https`) profile, so the environment is `Development`:
 
    ```powershell
    dotnet run --project BudgetFlow.API --launch-profile http
    ```
 
-5. **Swagger:** <http://localhost:5178/swagger>. Log in with `POST /api/auth/login`, click
+   Pending migrations are applied on startup, so the tables are created automatically
+   (`dotnet ef database update --project BudgetFlow.Data --startup-project BudgetFlow.API` does the same by hand).
+
+4. **Swagger:** <http://localhost:5178/swagger>. Log in with `POST /api/auth/login`, click
    **Authorize** and paste the `token`.
 
-On the first Development run (`"SeedDemoData": true`), an empty database is filled with demo data:
-three users, ten participants, three equipment items and sample meetings. A database that already has
-users is never seeded.
+When `SeedDemoData` is `true` (it is in `appsettings.Development.json`), an empty database is filled with
+demo data: three users, ten participants, three equipment items and sample meetings. A database that
+already has users is never seeded.
+
+## Deploying to Render
+
+The `Dockerfile` builds and runs `BudgetFlow.API`. On Render: create a **PostgreSQL** database, then a
+**Web Service** (runtime Docker, branch `main`) with these environment variables:
+
+| Variable | Value |
+|----------|-------|
+| `ConnectionStrings__Default` | The database's **Internal Database URL** (`postgresql://…` is accepted as is) |
+| `Jwt__Key` | A random secret of at least 32 characters (Render's **Generate** button) |
+| `SeedDemoData` | `true` to create the demo users on the first start (optional) |
+| `Cors__AllowedOrigins` | The client's address, e.g. `https://….onrender.com` (comma-separated, no path) |
+
+The service listens on Render's `PORT`, applies the migrations on startup and serves Swagger at `/swagger`.
 
 ## Authentication & roles
 
