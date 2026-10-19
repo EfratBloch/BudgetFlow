@@ -1,4 +1,5 @@
 using AutoMapper;
+using Microsoft.Extensions.Logging;
 using YouthGroups.Core.Common;
 using YouthGroups.Core.DTOs;
 using YouthGroups.Core.Entities;
@@ -31,12 +32,15 @@ public class EquipmentService : IEquipmentService
     private readonly IEquipmentRepository _equipment;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IMapper _mapper;
+    private readonly ILogger<EquipmentService> _logger;
 
-    public EquipmentService(IEquipmentRepository equipment, IUnitOfWork unitOfWork, IMapper mapper)
+    public EquipmentService(IEquipmentRepository equipment, IUnitOfWork unitOfWork, IMapper mapper,
+        ILogger<EquipmentService> logger)
     {
         _equipment = equipment;
         _unitOfWork = unitOfWork;
         _mapper = mapper;
+        _logger = logger;
     }
 
     public async Task<Result<IReadOnlyList<EquipmentDto>>> GetAllAsync(EquipmentStatus? status, CancellationToken ct)
@@ -79,7 +83,7 @@ public class EquipmentService : IEquipmentService
         {
             // A taken item keeps its status; it goes to maintenance only after it is returned
             if (dto.InMaintenance)
-                return Result.Conflict("This item is on loan. It can be sent to maintenance after it is returned.");
+                return Conflict("Update", id, "This item is on loan. It can be sent to maintenance after it is returned.");
         }
         else
         {
@@ -96,7 +100,7 @@ public class EquipmentService : IEquipmentService
         }
         catch (ConcurrencyConflictException)
         {
-            return Result.Conflict(ChangedMeanwhile);
+            return Conflict("Update", id, ChangedMeanwhile);
         }
 
         return Result.Ok();
@@ -109,7 +113,7 @@ public class EquipmentService : IEquipmentService
             return Result.NotFound(ItemNotFound);
 
         if (item.Status == EquipmentStatus.Taken)
-            return Result.Conflict("This item is on loan and cannot be deleted until it is returned.");
+            return Conflict("Delete", id, "This item is on loan and cannot be deleted until it is returned.");
 
         _equipment.Remove(item);
 
@@ -120,7 +124,7 @@ public class EquipmentService : IEquipmentService
         }
         catch (ConcurrencyConflictException)
         {
-            return Result.Conflict(ChangedMeanwhile);
+            return Conflict("Delete", id, ChangedMeanwhile);
         }
 
         return Result.Ok();
@@ -136,7 +140,7 @@ public class EquipmentService : IEquipmentService
             return Result.NotFound(ItemNotFound);
 
         if (item.Status != EquipmentStatus.Available)
-            return Result.Conflict("This item is already on loan");
+            return Conflict("Take", equipmentId, "This item is already on loan");
 
         item.Status = EquipmentStatus.Taken;
         item.HolderUserId = caller.UserId;
@@ -149,7 +153,7 @@ public class EquipmentService : IEquipmentService
         }
         catch (ConcurrencyConflictException)
         {
-            return Result.Conflict("Another guide just took this item. Please try again.");
+            return Conflict("Take", equipmentId, "Another guide just took this item. Please try again.");
         }
 
         await transaction.CommitAsync(ct);
@@ -180,10 +184,17 @@ public class EquipmentService : IEquipmentService
         }
         catch (ConcurrencyConflictException)
         {
-            return Result.Conflict("This item was just returned or changed by someone else. Please reload.");
+            return Conflict("Return", equipmentId, "This item was just returned or changed by someone else. Please reload.");
         }
 
         await transaction.CommitAsync(ct);
         return Result.Ok();
+    }
+
+    // Every conflict over an item is a Warning in the log: handled (the caller got a 409), but worth seeing
+    private Result Conflict(string action, int equipmentId, string message)
+    {
+        _logger.LogWarning("Equipment conflict on {Action} of item {EquipmentId}: {Reason}", action, equipmentId, message);
+        return Result.Conflict(message);
     }
 }

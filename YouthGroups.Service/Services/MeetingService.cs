@@ -1,4 +1,5 @@
 using AutoMapper;
+using Microsoft.Extensions.Logging;
 using YouthGroups.Core.Common;
 using YouthGroups.Core.DTOs;
 using YouthGroups.Core.Entities;
@@ -33,19 +34,22 @@ public class MeetingService : IMeetingService
     private readonly IUnitOfWork _unitOfWork;
     private readonly BudgetPots _pots;
     private readonly IMapper _mapper;
+    private readonly ILogger<MeetingService> _logger;
 
     public MeetingService(
         IMeetingRepository meetings,
         IParticipantRepository participants,
         IUnitOfWork unitOfWork,
         BudgetPots pots,
-        IMapper mapper)
+        IMapper mapper,
+        ILogger<MeetingService> logger)
     {
         _meetings = meetings;
         _participants = participants;
         _unitOfWork = unitOfWork;
         _pots = pots;
         _mapper = mapper;
+        _logger = logger;
     }
 
     public async Task<Result<PagedResult<MeetingListItemDto>>> GetPagedAsync(
@@ -221,16 +225,22 @@ public class MeetingService : IMeetingService
                 var shortfall = total - available;
 
                 if (type != MeetingType.Activity)
-                    return OverBudget(pot, shortfall);
+                    return OverBudget(pot, shortfall, type, caller);
 
                 var birthday = await _pots.GetAsync(BudgetSource.Birthday, caller.UserId, excludeMeetingId, ct);
                 var birthdayAvailable = Math.Max(birthday.Remaining, 0m);
 
                 // Even both pots together are not enough
                 if (shortfall > birthdayAvailable)
-                    return OverBudget(pot, shortfall);
+                    return OverBudget(pot, shortfall, type, caller);
 
                 if (!allowBirthdayDraw)
+                {
+                    _logger.LogWarning(
+                        "Budget overrun: {Type} meeting by user {UserId} is {Shortfall} over the activity budget; "
+                        + "asking to confirm a draw from the birthday budget ({BirthdayAvailable} available)",
+                        type, caller.UserId, shortfall, birthdayAvailable);
+
                     return CheckResult.Fail(Result.Conflict(
                         "There is not enough left in the activity budget. "
                         + "Confirm to charge the missing amount to the birthday budget.",
@@ -239,8 +249,13 @@ public class MeetingService : IMeetingService
                             ["shortfall"] = shortfall,
                             ["birthdayAvailable"] = birthdayAvailable
                         }));
+                }
 
-                // Split: the first `available` goes to Activity, the shortfall to Birthday
+                // Split: the first `available` goes to Activity, the shortfall to Birthday.
+                // Not a warning - the guide confirmed it, so this is the normal flow.
+                _logger.LogInformation(
+                    "Budget split: {Shortfall} of the {Type} meeting by user {UserId} is charged to the birthday budget",
+                    shortfall, type, caller.UserId);
                 return new CheckResult(null, utcDate, participants, source, ActivityLimit: available);
             }
         }
@@ -279,14 +294,21 @@ public class MeetingService : IMeetingService
         return result;
     }
 
-    private static CheckResult OverBudget(BudgetPotDto pot, decimal shortfall)
-        => CheckResult.Fail(Result.Conflict(
+    // A refused meeting is a Warning in the log: handled (the caller got a 409), but worth seeing
+    private CheckResult OverBudget(BudgetPotDto pot, decimal shortfall, MeetingType type, CurrentUser caller)
+    {
+        _logger.LogWarning(
+            "Budget overrun: {Type} meeting by user {UserId} refused, {Shortfall} over the {Pot} budget (remaining {Remaining})",
+            type, caller.UserId, shortfall, pot.Label, pot.Remaining);
+
+        return CheckResult.Fail(Result.Conflict(
             $"This meeting is over the {pot.Label.ToLowerInvariant()} budget.",
             new Dictionary<string, object>
             {
                 ["shortfall"] = shortfall,
                 ["remaining"] = pot.Remaining
             }));
+    }
 
     // The meeting type decides the pot - the reporter never picks it
     private static BudgetSource SourceFor(MeetingType type) => type switch
