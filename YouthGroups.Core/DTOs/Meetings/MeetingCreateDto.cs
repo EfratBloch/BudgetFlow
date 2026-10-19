@@ -27,6 +27,7 @@ public class MeetingCreateDto
     public List<ExpenseCreateDto> Expenses { get; set; } = new();
 
     // false: going over the activity pot returns 409 with the shortfall.
-    // true:  the guide approved charging this meeting to her birthday pot.
+    // true:  the guide approved charging the shortfall to her birthday pot
+    //        (the rest of the activity pot is used first).
     public bool AllowBirthdayDraw { get; set; }
 }
