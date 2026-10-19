@@ -10,8 +10,6 @@ public interface IRepository<T> where T : class
     // For Equipment this is what makes the concurrency token work.
     Task<T?> GetForUpdateAsync(int id, CancellationToken ct);
 
-    Task<bool> ExistsAsync(int id, CancellationToken ct);
-
     Task AddAsync(T entity, CancellationToken ct);
 
     // Update and Remove only mark the entity in EF's change tracker - no database

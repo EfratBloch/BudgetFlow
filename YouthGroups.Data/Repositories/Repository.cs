@@ -23,9 +23,6 @@ public class Repository<T> : IRepository<T> where T : class
     public virtual Task<T?> GetForUpdateAsync(int id, CancellationToken ct)
         => Set.FirstOrDefaultAsync(e => EF.Property<int>(e, "Id") == id, ct);
 
-    public Task<bool> ExistsAsync(int id, CancellationToken ct)
-        => Set.AnyAsync(e => EF.Property<int>(e, "Id") == id, ct);
-
     public async Task AddAsync(T entity, CancellationToken ct)
         => await Set.AddAsync(entity, ct);
 
