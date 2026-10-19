@@ -47,6 +47,7 @@ builder.Services.AddScoped<IBudgetService, BudgetService>();
 builder.Services.AddScoped<IBudgetAdditionService, BudgetAdditionService>();
 builder.Services.AddScoped<IMeetingService, MeetingService>();
 builder.Services.AddScoped<IEquipmentService, EquipmentService>();
+builder.Services.AddScoped<IGuideOverviewService, GuideOverviewService>();
 builder.Services.AddScoped<BudgetPots>();
 
 // Stateless helpers - one instance for the whole application

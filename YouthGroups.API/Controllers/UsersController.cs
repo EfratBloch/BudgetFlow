@@ -14,11 +14,31 @@ public class UsersController : ApiControllerBase
     private const string Coordinator = nameof(UserRole.Coordinator);
 
     private readonly IUserService _users;
+    private readonly IGuideOverviewService _overview;
 
-    public UsersController(IUserService users)
+    public UsersController(IUserService users, IGuideOverviewService overview)
     {
         _users = users;
+        _overview = overview;
     }
+
+    // GET /api/users/2/overview - the guide panel: details, participants, both pots with
+    // what is left, and her 10 most recent meetings, in one response.
+    // The coordinator sees any guide; a guide only herself (checked in the service).
+    [HttpGet("{id:int}/overview")]
+    [ProducesResponseType(typeof(GuideOverviewDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetOverview(int id, CancellationToken ct)
+        => FromResult(await _overview.GetAsync(id, Caller, ct));
+
+    // GET /api/users/me/overview - the same panel for the caller, taken from her token.
+    // "me" is not an int, so it never matches the {id:int} route above.
+    [HttpGet("me/overview")]
+    [ProducesResponseType(typeof(GuideOverviewDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetMyOverview(CancellationToken ct)
+        => FromResult(await _overview.GetAsync(Caller.UserId, Caller, ct));
 
     // GET /api/users?sort=name_asc&page=1&pageSize=20 - one page of guides
     [HttpGet]
