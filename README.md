@@ -1,4 +1,4 @@
-# YouthGroups API (BudgetFlow server)
+# BudgetFlow API
 
 Budget and activity management for a youth movement branch. The coordinator manages the guides; every
 guide manages her own group of participants and reports the meetings she runs (attendance + expenses).
@@ -12,11 +12,11 @@ ASP.NET Core Web API (.NET 10) · PostgreSQL 16 · EF Core · JWT · NLog · Aut
 
 | Project | Responsibility |
 |---------|----------------|
-| `YouthGroups.Core` | Entities, enums, DTOs, repository/service interfaces, `Result`, settings. No dependencies. |
-| `YouthGroups.Data` | `AppDbContext`, Fluent configurations, repositories, unit of work, migrations, dev seed. |
-| `YouthGroups.Service` | Business rules, budget calculation, authorization of "is it hers?", AutoMapper profile. |
-| `YouthGroups.API` | Controllers, middleware (correlation id, exception handling), JWT, DI, Swagger, NLog. |
-| `YouthGroups.Tests` | xUnit + Moq + FluentAssertions. |
+| `BudgetFlow.Core` | Entities, enums, DTOs, repository/service interfaces, `Result`, settings. No dependencies. |
+| `BudgetFlow.Data` | `AppDbContext`, Fluent configurations, repositories, unit of work, migrations, dev seed. |
+| `BudgetFlow.Service` | Business rules, budget calculation, authorization of "is it hers?", AutoMapper profile. |
+| `BudgetFlow.API` | Controllers, middleware (correlation id, exception handling), JWT, DI, Swagger, NLog. |
+| `BudgetFlow.Tests` | xUnit + Moq + FluentAssertions. |
 
 Dependency direction: **Core → nothing · Data → Core · Service → Core · API → Core + Service + Data**
 (Data is referenced by the API for DI registration only). The Service layer never depends on EF Core.
@@ -75,13 +75,13 @@ powershell -ExecutionPolicy Bypass -File scripts\race-demo.ps1
    docker compose up -d
    ```
 
-   Starts PostgreSQL 16 (`youthgroups-db`, port 5432, database `YouthGroupsDb`).
+   Starts PostgreSQL 16 (`budgetflow-db`, port 5432, database `BudgetFlowDb`).
 
 2. **Secrets** (User Secrets, never in `appsettings*.json`), with the same password as in `.env`:
 
    ```powershell
-   dotnet user-secrets set "ConnectionStrings:Default" "Host=localhost;Port=5432;Database=YouthGroupsDb;Username=postgres;Password=<your password>" --project YouthGroups.API
-   dotnet user-secrets set "Jwt:Key" "<a random string of at least 32 characters>" --project YouthGroups.API
+   dotnet user-secrets set "ConnectionStrings:Default" "Host=localhost;Port=5432;Database=BudgetFlowDb;Username=postgres;Password=<your password>" --project BudgetFlow.API
+   dotnet user-secrets set "Jwt:Key" "<a random string of at least 32 characters>" --project BudgetFlow.API
    ```
 
    The server refuses to start if `Jwt:Key` is missing or shorter than 32 bytes. Outside Development,
@@ -90,13 +90,13 @@ powershell -ExecutionPolicy Bypass -File scripts\race-demo.ps1
 3. **Database:**
 
    ```powershell
-   dotnet ef database update --project YouthGroups.Data --startup-project YouthGroups.API
+   dotnet ef database update --project BudgetFlow.Data --startup-project BudgetFlow.API
    ```
 
 4. **Run** with the `http` (or `https`) profile, so the environment is `Development`:
 
    ```powershell
-   dotnet run --project YouthGroups.API --launch-profile http
+   dotnet run --project BudgetFlow.API --launch-profile http
    ```
 
 5. **Swagger:** <http://localhost:5178/swagger>. Log in with `POST /api/auth/login`, click
@@ -125,9 +125,9 @@ afterwards. Guides are created by the coordinator.
 
 | Role | Email | Password |
 |------|-------|----------|
-| Coordinator | `sarah@youthgroups.local` | `Coord!2026` |
-| Guide | `rachel@youthgroups.local` | `Guide!2026` |
-| Guide | `shira@youthgroups.local` | `Guide!2026` (second guide in the projector race) |
+| Coordinator | `sarah@budgetflow.local` | `Coord!2026` |
+| Guide | `rachel@budgetflow.local` | `Guide!2026` |
+| Guide | `shira@budgetflow.local` | `Guide!2026` (second guide in the projector race) |
 
 These accounts exist only in the local demo database; they are not real passwords.
 
@@ -181,8 +181,8 @@ Unexpected errors are caught by `ExceptionHandlingMiddleware` and returned as
 
 ## Logging
 
-`ILogger<T>` everywhere, with NLog underneath (`YouthGroups.API/nlog.config`): console and
-`YouthGroups.API/logs/yyyy-MM-dd.log`. `CorrelationIdMiddleware` gives every request a new id, adds it to
+`ILogger<T>` everywhere, with NLog underneath (`BudgetFlow.API/nlog.config`): console and
+`BudgetFlow.API/logs/yyyy-MM-dd.log`. `CorrelationIdMiddleware` gives every request a new id, adds it to
 every log line and returns it in the `X-Correlation-ID` header (and as `traceId` in a 500 answer).
 
 Levels: `Information` (requests, logins, main actions), `Warning` (equipment conflicts, refused meetings),
@@ -191,10 +191,10 @@ Levels: `Information` (requests, logins, main actions), `Warning` (equipment con
 ## Tests
 
 ```powershell
-dotnet test YouthGroups.sln
+dotnet test BudgetFlow.sln
 ```
 
-`YouthGroups.Tests` uses xUnit, Moq and FluentAssertions (pinned to 7.x, the last version under the
+`BudgetFlow.Tests` uses xUnit, Moq and FluentAssertions (pinned to 7.x, the last version under the
 Apache 2.0 licence).
 
 - **Service unit tests** (repositories, unit of work and mapper mocked with Moq; no database):
@@ -205,8 +205,8 @@ Apache 2.0 licence).
 - **Concurrency proof** (`EquipmentConcurrencyTests`): two independent `AppDbContext` instances read the
   same `Available` projector and both mark it `Taken`. The first `SaveChanges` succeeds and the second
   throws `DbUpdateConcurrencyException`; the database keeps the first take only. It runs against real
-  PostgreSQL (InMemory and SQLite have no `xmin`), in a `YouthGroupsDb_Test` database that is created,
-  migrated and dropped by the test fixture. The connection is read from the `YOUTHGROUPS_TEST_CONNECTION`
+  PostgreSQL (InMemory and SQLite have no `xmin`), in a `BudgetFlowDb_Test` database that is created,
+  migrated and dropped by the test fixture. The connection is read from the `BUDGETFLOW_TEST_CONNECTION`
   environment variable or, if it is not set, from the API's User Secrets (`ConnectionStrings:Default`),
   with the database name replaced. The Docker container must be running.
 

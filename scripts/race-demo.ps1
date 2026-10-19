@@ -23,9 +23,9 @@ function New-Request([string]$method, [string]$token) {
     $request
 }
 
-$rachel = Get-Token "rachel@youthgroups.local" "Guide!2026"
-$shira = Get-Token "shira@youthgroups.local" "Guide!2026"
-$sarah = Get-Token "sarah@youthgroups.local" "Coord!2026"
+$rachel = Get-Token "rachel@budgetflow.local" "Guide!2026"
+$shira = Get-Token "shira@budgetflow.local" "Guide!2026"
+$sarah = Get-Token "sarah@budgetflow.local" "Coord!2026"
 
 for ($round = 1; $round -le $Rounds; $round++) {
     # Both requests are sent before either answer arrives
