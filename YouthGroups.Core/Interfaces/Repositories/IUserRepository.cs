@@ -19,6 +19,10 @@ public interface IUserRepository : IRepository<User>
 
     Task<int> CountGuidesAsync(CancellationToken ct);
 
+    // True when the user still has participants, reported meetings or a taken item.
+    // Those foreign keys are Restrict, so such a user cannot be deleted.
+    Task<bool> HasLinkedDataAsync(int userId, CancellationToken ct);
+
     // Every guide with her participant count and spending per pot - ONE query
     Task<IReadOnlyList<GuideBudgetRow>> GetGuideBudgetRowsAsync(CancellationToken ct);
 }

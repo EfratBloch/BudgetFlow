@@ -10,6 +10,7 @@ using YouthGroups.Core.Enums;
 using YouthGroups.Core.Interfaces.Repositories;
 using YouthGroups.Core.Interfaces.Services;
 using YouthGroups.Core.Settings;
+using YouthGroups.Service.Common;
 
 namespace YouthGroups.Service.Services;
 
@@ -41,7 +42,7 @@ public class AuthService : IAuthService
 
     public async Task<Result<UserDto>> RegisterAsync(RegisterDto dto, CancellationToken ct)
     {
-        var email = NormalizeEmail(dto.Email);
+        var email = Email.Normalize(dto.Email);
 
         // The system has exactly one coordinator
         if (await _users.CoordinatorExistsAsync(ct))
@@ -72,7 +73,7 @@ public class AuthService : IAuthService
 
     public async Task<Result<TokenDto>> LoginAsync(LoginDto dto, CancellationToken ct)
     {
-        var user = await _users.GetByEmailAsync(NormalizeEmail(dto.Email), ct);
+        var user = await _users.GetByEmailAsync(Email.Normalize(dto.Email), ct);
 
         if (user is null || !_passwordHasher.Verify(user.PasswordHash, dto.Password))
             return Result<TokenDto>.Validation(InvalidCredentials);
@@ -108,7 +109,4 @@ public class AuthService : IAuthService
 
         return new JsonWebTokenHandler().CreateToken(descriptor);
     }
-
-    // Emails are compared case-insensitively: "Sarah@X.com" and "sarah@x.com" are one account
-    private static string NormalizeEmail(string email) => email.Trim().ToLowerInvariant();
 }

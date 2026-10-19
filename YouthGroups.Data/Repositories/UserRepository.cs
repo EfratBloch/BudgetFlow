@@ -59,6 +59,13 @@ public class UserRepository : Repository<User>, IUserRepository
     public Task<int> CountGuidesAsync(CancellationToken ct)
         => Set.CountAsync(u => u.Role == UserRole.Guide, ct);
 
+    // One query: three EXISTS subqueries combined with OR
+    public Task<bool> HasLinkedDataAsync(int userId, CancellationToken ct)
+        => Set.AnyAsync(u => u.Id == userId
+            && (u.Participants.Any()
+                || u.Meetings.Any()
+                || Context.Equipment.Any(e => e.HolderUserId == userId)), ct);
+
     // ONE query for all guides. The counts and sums are subqueries that PostgreSQL
     // computes itself - no loop over guides in C#, so no N+1.
     public async Task<IReadOnlyList<GuideBudgetRow>> GetGuideBudgetRowsAsync(CancellationToken ct)
