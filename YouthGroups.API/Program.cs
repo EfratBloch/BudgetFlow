@@ -1,8 +1,10 @@
 using System.Text;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
 using YouthGroups.Core.Common;
 using YouthGroups.Core.Interfaces.Repositories;
 using YouthGroups.Core.Interfaces.Services;
@@ -57,10 +59,15 @@ builder.Services.AddAutoMapper(cfg => cfg.AddProfile<MappingProfile>());
 // The token is checked against the same Key, Issuer and Audience that AuthService signs with.
 var jwt = builder.Configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>() ?? new JwtSettings();
 
-// Fail at startup, not on the first login, if the secret key is missing or too short
+// Fail at startup, not on the first login, if the secret key is missing or too short.
+// User Secrets are read only in the Development environment, so name the environment too:
+// running without the http/https launch profile starts in Production and finds no key.
 if (Encoding.UTF8.GetByteCount(jwt.Key) < 32)
     throw new InvalidOperationException(
-        "Jwt:Key must be at least 32 bytes. Set it with: dotnet user-secrets set \"Jwt:Key\" \"<random value>\"");
+        $"Jwt:Key is missing or shorter than 32 bytes (environment: {builder.Environment.EnvironmentName}). "
+        + "In development, start with the http or https launch profile (ASPNETCORE_ENVIRONMENT=Development) "
+        + "so User Secrets are loaded, and set the key with: dotnet user-secrets set \"Jwt:Key\" \"<random value>\". "
+        + "In production, set the Jwt__Key environment variable.");
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -94,9 +101,30 @@ builder.Services.AddAuthorization(options =>
         .Build();
 });
 
-builder.Services.AddControllers();
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
+// Enums travel as text ("Coordinator", "Activity") instead of numbers, in both directions
+builder.Services.AddControllers()
+    .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+
+// Swagger: a test page in the browser (/swagger) generated from the controllers.
+// The "Authorize" button sends the JWT with every request made from the page.
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo { Title = "YouthGroups API", Version = "v1" });
+
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        Description = "Log in with POST /api/auth/login and paste the token here (without the word Bearer)."
+    });
+
+    options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
+    {
+        [new OpenApiSecuritySchemeReference("Bearer", document)] = []
+    });
+});
 
 var app = builder.Build();
 
@@ -112,8 +140,9 @@ if (app.Configuration.GetValue<bool>("SeedDemoData"))
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-    // The API description is public, otherwise the fallback policy would hide it behind a login
-    app.MapOpenApi().AllowAnonymous();
+    // Middleware, not endpoints, so the "login required" fallback policy does not apply to them
+    app.UseSwagger();
+    app.UseSwaggerUI();
 }
 
 app.UseHttpsRedirection();
