@@ -153,6 +153,9 @@ if (app.Configuration.GetValue<bool>("SeedDemoData"))
 // First in the pipeline, so it wraps everything after it (GlobalExceptionHandler)
 app.UseExceptionHandler();
 
+// Second: a new CorrelationId for every request, in the response header and in every log line of the request
+app.UseMiddleware<CorrelationIdMiddleware>();
+
 if (app.Environment.IsDevelopment())
 {
     // Middleware, not endpoints, so the "login required" fallback policy does not apply to them
