@@ -19,6 +19,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- NLog reads its rules from nlog.config next to the running program -->
+    <Content Update="nlog.config" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\YouthGroups.Service\YouthGroups.Service.csproj" />
     <ProjectReference Include="..\YouthGroups.Core\YouthGroups.Core.csproj" />
     <ProjectReference Include="..\YouthGroups.Data\YouthGroups.Data.csproj" />

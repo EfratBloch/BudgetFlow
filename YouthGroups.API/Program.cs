@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using NLog.Web;
+using YouthGroups.API.Middleware;
 using YouthGroups.Core.Common;
 using YouthGroups.Core.Interfaces.Repositories;
 using YouthGroups.Core.Interfaces.Services;
@@ -18,6 +20,14 @@ using YouthGroups.Service.Security;
 using YouthGroups.Service.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Logging through NLog (rules and files in nlog.config) instead of the default providers
+builder.Logging.ClearProviders();
+builder.Host.UseNLog();
+
+// Unexpected errors: one handler for every request, returning a clean ProblemDetails 500
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
 // Add services to the container.
 
@@ -139,6 +149,10 @@ if (app.Configuration.GetValue<bool>("SeedDemoData"))
 }
 
 // Configure the HTTP request pipeline.
+
+// First in the pipeline, so it wraps everything after it (GlobalExceptionHandler)
+app.UseExceptionHandler();
+
 if (app.Environment.IsDevelopment())
 {
     // Middleware, not endpoints, so the "login required" fallback policy does not apply to them
