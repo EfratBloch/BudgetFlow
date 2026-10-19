@@ -25,10 +25,6 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
 builder.Host.UseNLog();
 
-// Unexpected errors: one handler for every request, returning a clean ProblemDetails 500
-builder.Services.AddProblemDetails();
-builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
-
 // Add services to the container.
 
 // The connection string comes from configuration (User Secrets in development), never from code
@@ -150,8 +146,9 @@ if (app.Configuration.GetValue<bool>("SeedDemoData"))
 
 // Configure the HTTP request pipeline.
 
-// First in the pipeline, so it wraps everything after it (GlobalExceptionHandler)
-app.UseExceptionHandler();
+// First in the pipeline, so its try/catch wraps everything after it: any unexpected error
+// becomes one JSON answer { traceId, status, message } and an Error line in the log
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 // Second: a new CorrelationId for every request, in the response header and in every log line of the request
 app.UseMiddleware<CorrelationIdMiddleware>();
