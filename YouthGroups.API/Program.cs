@@ -100,6 +100,15 @@ builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
+// Demo data: switched on by "SeedDemoData": true (appsettings.Development.json).
+// DbSeeder only fills an EMPTY database, so restarting the server never duplicates rows.
+if (app.Configuration.GetValue<bool>("SeedDemoData"))
+{
+    // DbSeeder is Scoped (it uses AppDbContext), and there is no HTTP request yet - so make a scope
+    using var scope = app.Services.CreateScope();
+    await scope.ServiceProvider.GetRequiredService<DbSeeder>().SeedAsync();
+}
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
