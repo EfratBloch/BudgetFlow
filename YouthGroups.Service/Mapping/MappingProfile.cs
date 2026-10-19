@@ -13,6 +13,10 @@ public class MappingProfile : Profile
         CreateMap<Participant, ParticipantDto>();
         CreateMap<Expense, ExpenseDto>();
 
+        // HolderName is null while the item is in the store
+        CreateMap<Equipment, EquipmentDto>()
+            .ForMember(d => d.HolderName, o => o.MapFrom(e => e.Holder != null ? e.Holder.FullName : null));
+
         // Expects User, Expenses and Participants loaded (IMeetingRepository.GetWithDetailsAsync)
         CreateMap<Meeting, MeetingDto>()
             .ForMember(d => d.ReporterName, o => o.MapFrom(m => m.User.FullName))
