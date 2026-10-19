@@ -59,12 +59,13 @@ public class UserRepository : Repository<User>, IUserRepository
     public Task<int> CountGuidesAsync(CancellationToken ct)
         => Set.CountAsync(u => u.Role == UserRole.Guide, ct);
 
-    // One query: three EXISTS subqueries combined with OR
+    // One query: four EXISTS subqueries combined with OR
     public Task<bool> HasLinkedDataAsync(int userId, CancellationToken ct)
         => Set.AnyAsync(u => u.Id == userId
             && (u.Participants.Any()
                 || u.Meetings.Any()
-                || Context.Equipment.Any(e => e.HolderUserId == userId)), ct);
+                || Context.Equipment.Any(e => e.HolderUserId == userId)
+                || Context.BudgetAdditions.Any(a => a.GuideId == userId)), ct);
 
     // ONE query for all guides. The counts and sums are subqueries that PostgreSQL
     // computes itself - no loop over guides in C#, so no N+1.
@@ -81,6 +82,12 @@ public class UserRepository : Repository<User>, IUserRepository
                     .Sum(e => (decimal?)e.Amount) ?? 0,
                 u.Meetings.SelectMany(m => m.Expenses)
                     .Where(e => e.BudgetSource == BudgetSource.Birthday)
-                    .Sum(e => (decimal?)e.Amount) ?? 0))
+                    .Sum(e => (decimal?)e.Amount) ?? 0,
+                Context.BudgetAdditions
+                    .Where(a => a.GuideId == u.Id && a.TargetPot == BudgetSource.Activity)
+                    .Sum(a => (decimal?)a.Amount) ?? 0,
+                Context.BudgetAdditions
+                    .Where(a => a.GuideId == u.Id && a.TargetPot == BudgetSource.Birthday)
+                    .Sum(a => (decimal?)a.Amount) ?? 0))
             .ToListAsync(ct);
 }

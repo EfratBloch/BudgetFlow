@@ -119,7 +119,7 @@ public class UserService : IUserService
         // Without this check the database would reject the DELETE (Restrict foreign keys)
         if (await _users.HasLinkedDataAsync(id, ct))
             return Result.Conflict(
-                "This guide still has participants, meetings or a taken item. Move or remove them first.");
+                "This guide still has participants, meetings, a taken item or budget additions. Move or remove them first.");
 
         _users.Remove(guide);
         await _unitOfWork.SaveChangesAsync(ct);

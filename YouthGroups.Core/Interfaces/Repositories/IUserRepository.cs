@@ -19,7 +19,7 @@ public interface IUserRepository : IRepository<User>
 
     Task<int> CountGuidesAsync(CancellationToken ct);
 
-    // True when the user still has participants, reported meetings or a taken item.
+    // True when the user still has participants, reported meetings, a taken item or budget additions.
     // Those foreign keys are Restrict, so such a user cannot be deleted.
     Task<bool> HasLinkedDataAsync(int userId, CancellationToken ct);
 

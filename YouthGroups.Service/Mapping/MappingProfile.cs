@@ -13,6 +13,10 @@ public class MappingProfile : Profile
         CreateMap<Participant, ParticipantDto>();
         CreateMap<Expense, ExpenseDto>();
 
+        // Expects Guide loaded (IBudgetAdditionRepository.GetAllAsync)
+        CreateMap<BudgetAddition, BudgetAdditionDto>()
+            .ForMember(d => d.GuideName, o => o.MapFrom(a => a.Guide != null ? a.Guide.FullName : string.Empty));
+
         // HolderName is null while the item is in the store
         CreateMap<Equipment, EquipmentDto>()
             .ForMember(d => d.HolderName, o => o.MapFrom(e => e.Holder != null ? e.Holder.FullName : null));

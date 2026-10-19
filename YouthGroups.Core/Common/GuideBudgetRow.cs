@@ -7,4 +7,6 @@ public sealed record GuideBudgetRow(
     string FullName,
     int ParticipantCount,
     decimal ActivitySpent,
-    decimal BirthdaySpent);
+    decimal BirthdaySpent,
+    decimal ActivityAdded,   // budget additions from the coordinator
+    decimal BirthdayAdded);

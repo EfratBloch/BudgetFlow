@@ -17,6 +17,7 @@ public class AppDbContext : DbContext
     public DbSet<Meeting> Meetings => Set<Meeting>();
     public DbSet<Expense> Expenses => Set<Expense>();
     public DbSet<Equipment> Equipment => Set<Equipment>();
+    public DbSet<BudgetAddition> BudgetAdditions => Set<BudgetAddition>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

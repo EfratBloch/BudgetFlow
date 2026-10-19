@@ -37,6 +37,55 @@ namespace YouthGroups.Data.Migrations
                     b.ToTable("MeetingAttendance");
                 });
 
+            modelBuilder.Entity("YouthGroups.Core.Entities.BudgetAddition", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FromPot")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("GuideId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("TargetPot")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GuideId", "TargetPot");
+
+                    b.ToTable("BudgetAdditions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_BudgetAdditions_Amount_Positive", "\"Amount\" > 0");
+
+                            t.HasCheckConstraint("CK_BudgetAdditions_FromPot_Matches_Kind", "(\"Kind\" = 'Transfer' AND \"FromPot\" IS NOT NULL) OR (\"Kind\" = 'Extra' AND \"FromPot\" IS NULL)");
+                        });
+                });
+
             modelBuilder.Entity("YouthGroups.Core.Entities.Equipment", b =>
                 {
                     b.Property<int>("Id")
@@ -250,6 +299,17 @@ namespace YouthGroups.Data.Migrations
                         .HasForeignKey("ParticipantId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("YouthGroups.Core.Entities.BudgetAddition", b =>
+                {
+                    b.HasOne("YouthGroups.Core.Entities.User", "Guide")
+                        .WithMany()
+                        .HasForeignKey("GuideId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Guide");
                 });
 
             modelBuilder.Entity("YouthGroups.Core.Entities.Equipment", b =>

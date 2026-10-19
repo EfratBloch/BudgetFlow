@@ -30,24 +30,21 @@ public class MeetingService : IMeetingService
 
     private readonly IMeetingRepository _meetings;
     private readonly IParticipantRepository _participants;
-    private readonly IUserRepository _users;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly BudgetCalculator _calculator;
+    private readonly BudgetPots _pots;
     private readonly IMapper _mapper;
 
     public MeetingService(
         IMeetingRepository meetings,
         IParticipantRepository participants,
-        IUserRepository users,
         IUnitOfWork unitOfWork,
-        BudgetCalculator calculator,
+        BudgetPots pots,
         IMapper mapper)
     {
         _meetings = meetings;
         _participants = participants;
-        _users = users;
         _unitOfWork = unitOfWork;
-        _calculator = calculator;
+        _pots = pots;
         _mapper = mapper;
     }
 
@@ -213,8 +210,8 @@ public class MeetingService : IMeetingService
 
         if (total > 0)
         {
-            var spent = await _meetings.GetSpentBySourceAsync(caller.UserId, excludeMeetingId, ct);
-            var pot = await PotAsync(source, caller.UserId, spent, ct);
+            // The same pot numbers the budget screen shows, including the coordinator's additions
+            var pot = await _pots.GetAsync(source, caller.UserId, excludeMeetingId, ct);
 
             // Remaining can be negative if the rates were lowered after spending
             var available = Math.Max(pot.Remaining, 0m);
@@ -226,7 +223,7 @@ public class MeetingService : IMeetingService
                 if (type != MeetingType.Activity)
                     return OverBudget(pot, shortfall);
 
-                var birthday = await PotAsync(BudgetSource.Birthday, caller.UserId, spent, ct);
+                var birthday = await _pots.GetAsync(BudgetSource.Birthday, caller.UserId, excludeMeetingId, ct);
                 var birthdayAvailable = Math.Max(birthday.Remaining, 0m);
 
                 // Even both pots together are not enough
@@ -280,25 +277,6 @@ public class MeetingService : IMeetingService
         }
 
         return result;
-    }
-
-    // The pot's ceiling comes from BudgetCalculator - the same formulas BudgetService shows
-    private async Task<BudgetPotDto> PotAsync(
-        BudgetSource source, int userId, IReadOnlyDictionary<BudgetSource, decimal> spent, CancellationToken ct)
-    {
-        var spentOnPot = spent.TryGetValue(source, out var amount) ? amount : 0m;
-
-        return source switch
-        {
-            BudgetSource.Activity => _calculator.ActivityPot(spentOnPot),
-            BudgetSource.Birthday => _calculator.BirthdayPot(
-                await _participants.CountByGuideAsync(userId, ct), spentOnPot),
-            BudgetSource.GuideMeetings => _calculator.GuideMeetingsPot(
-                await _users.CountGuidesAsync(ct), spentOnPot),
-            BudgetSource.Annual => _calculator.AnnualPot(
-                await _participants.CountAllAsync(ct), spentOnPot),
-            _ => throw new ArgumentOutOfRangeException(nameof(source), source, null)
-        };
     }
 
     private static CheckResult OverBudget(BudgetPotDto pot, decimal shortfall)

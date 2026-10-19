@@ -14,20 +14,23 @@ namespace YouthGroups.Service.Services;
 public class BudgetService : IBudgetService
 {
     private readonly IUserRepository _users;
-    private readonly IParticipantRepository _participants;
     private readonly IMeetingRepository _meetings;
+    private readonly IBudgetAdditionRepository _additions;
     private readonly BudgetCalculator _calculator;
+    private readonly BudgetPots _pots;
 
     public BudgetService(
         IUserRepository users,
-        IParticipantRepository participants,
         IMeetingRepository meetings,
-        BudgetCalculator calculator)
+        IBudgetAdditionRepository additions,
+        BudgetCalculator calculator,
+        BudgetPots pots)
     {
         _users = users;
-        _participants = participants;
         _meetings = meetings;
+        _additions = additions;
         _calculator = calculator;
+        _pots = pots;
     }
 
     public async Task<Result<UserBudgetDto>> GetUserBudgetAsync(int userId, CurrentUser caller, CancellationToken ct)
@@ -40,12 +43,13 @@ public class BudgetService : IBudgetService
         if (user is null)
             return Result<UserBudgetDto>.NotFound("User not found.");
 
-        // One SUM ... GROUP BY BudgetSource over this user's expenses
-        var spent = await _meetings.GetSpentBySourceAsync(userId, null, ct);
+        BudgetSource[] sources = user.Role == UserRole.Coordinator
+            ? [BudgetSource.GuideMeetings, BudgetSource.Annual]
+            : [BudgetSource.Activity, BudgetSource.Birthday];
 
-        var pots = user.Role == UserRole.Coordinator
-            ? await CoordinatorPotsAsync(spent, ct)
-            : await GuidePotsAsync(userId, spent, ct);
+        var pots = new List<BudgetPotDto>();
+        foreach (var source in sources)
+            pots.Add(await _pots.GetAsync(source, userId, null, ct));
 
         return Result<UserBudgetDto>.Ok(ToDto(user, pots));
     }
@@ -56,7 +60,7 @@ public class BudgetService : IBudgetService
         if (coordinator is null)
             return Result<BudgetSummaryDto>.NotFound("No coordinator is registered yet.");
 
-        // ONE query for all guides: participant counts and spending per pot, computed in SQL
+        // ONE query for all guides: participant counts, spending and additions per pot, computed in SQL
         var rows = await _users.GetGuideBudgetRowsAsync(ct);
 
         // Every participant belongs to a guide, so the rows already hold both totals
@@ -69,8 +73,14 @@ public class BudgetService : IBudgetService
         {
             Coordinator = ToDto(coordinator, new List<BudgetPotDto>
             {
-                _calculator.GuideMeetingsPot(guideCount, SpentOn(coordinatorSpent, BudgetSource.GuideMeetings)),
-                _calculator.AnnualPot(totalParticipants, SpentOn(coordinatorSpent, BudgetSource.Annual))
+                _calculator.GuideMeetingsPot(
+                    guideCount,
+                    SpentOn(coordinatorSpent, BudgetSource.GuideMeetings),
+                    await _additions.SumTransferredFromAsync(BudgetSource.GuideMeetings, ct)),
+                _calculator.AnnualPot(
+                    totalParticipants,
+                    SpentOn(coordinatorSpent, BudgetSource.Annual),
+                    await _additions.SumTransferredFromAsync(BudgetSource.Annual, ct))
             }),
             Guides = rows.Select(r => new UserBudgetDto
             {
@@ -79,36 +89,11 @@ public class BudgetService : IBudgetService
                 Role = UserRole.Guide,
                 Pots = new List<BudgetPotDto>
                 {
-                    _calculator.ActivityPot(r.ActivitySpent),
-                    _calculator.BirthdayPot(r.ParticipantCount, r.BirthdaySpent)
+                    _calculator.ActivityPot(r.ActivitySpent, r.ActivityAdded),
+                    _calculator.BirthdayPot(r.ParticipantCount, r.BirthdaySpent, r.BirthdayAdded)
                 }
             }).ToList()
         });
-    }
-
-    private async Task<List<BudgetPotDto>> CoordinatorPotsAsync(
-        IReadOnlyDictionary<BudgetSource, decimal> spent, CancellationToken ct)
-    {
-        var guideCount = await _users.CountGuidesAsync(ct);
-        var totalParticipants = await _participants.CountAllAsync(ct);
-
-        return new List<BudgetPotDto>
-        {
-            _calculator.GuideMeetingsPot(guideCount, SpentOn(spent, BudgetSource.GuideMeetings)),
-            _calculator.AnnualPot(totalParticipants, SpentOn(spent, BudgetSource.Annual))
-        };
-    }
-
-    private async Task<List<BudgetPotDto>> GuidePotsAsync(
-        int guideId, IReadOnlyDictionary<BudgetSource, decimal> spent, CancellationToken ct)
-    {
-        var participantCount = await _participants.CountByGuideAsync(guideId, ct);
-
-        return new List<BudgetPotDto>
-        {
-            _calculator.ActivityPot(SpentOn(spent, BudgetSource.Activity)),
-            _calculator.BirthdayPot(participantCount, SpentOn(spent, BudgetSource.Birthday))
-        };
     }
 
     // A pot with no expenses yet is simply missing from the GROUP BY result
