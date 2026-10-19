@@ -1,115 +1,219 @@
 # YouthGroups API (BudgetFlow server)
 
-## What the system does
+Budget and activity management for a youth movement branch. The coordinator manages the guides; every
+guide manages her own group of participants and reports the meetings she runs (attendance + expenses).
+Every expense is charged to a budget pot calculated from fixed rates, and the server refuses a meeting
+that goes over its pot. Guides also share one equipment store, and its single projector is the
+contended resource the concurrency design protects.
 
-YouthGroups is the server of a budget and activity management system for a youth movement branch.
-The branch coordinator manages the guides, and every guide manages her own group of participants.
-Guides report the meetings they run (activities and birthday parties) with the attendance and the
-expenses. The coordinator reports guides meetings and special events. Every expense is charged to a
-budget pot that is calculated from fixed rates in `appsettings.json`, and the server refuses a meeting
-that goes over its pot. The coordinator can see the budget of every guide, add money to a guide's pot,
-and manage the shared equipment store, from which guides take and return items.
+ASP.NET Core Web API (.NET 10) · PostgreSQL 16 · EF Core · JWT · NLog · AutoMapper.
 
-The server is an ASP.NET Core Web API (.NET 10) in four layers:
-`YouthGroups.API` (controllers, middleware) → `YouthGroups.Service` (business rules) →
-`YouthGroups.Data` (EF Core, PostgreSQL) → `YouthGroups.Core` (entities, DTOs, interfaces).
-Authentication uses JWT, and logging uses NLog.
+## Architecture
 
-## The limited resource: the projector
+| Project | Responsibility |
+|---------|----------------|
+| `YouthGroups.Core` | Entities, enums, DTOs, repository/service interfaces, `Result`, settings. No dependencies. |
+| `YouthGroups.Data` | `AppDbContext`, Fluent configurations, repositories, unit of work, migrations, dev seed. |
+| `YouthGroups.Service` | Business rules, budget calculation, authorization of "is it hers?", AutoMapper profile. |
+| `YouthGroups.API` | Controllers, middleware (correlation id, exception handling), JWT, DI, Swagger, NLog. |
+| `YouthGroups.Tests` | xUnit + Moq + FluentAssertions. |
 
-The branch has only ONE projector (`Projector 1` in the demo data), and every guide may want it for
-the same evening. A guide takes an item with `PUT /api/equipment/{id}/holder` and returns it with
-`DELETE /api/equipment/{id}/holder`. If two guides press "take" at the same moment, exactly one of them
-must get it.
+Dependency direction: **Core → nothing · Data → Core · Service → Core · API → Core + Service + Data**
+(Data is referenced by the API for DI registration only). The Service layer never depends on EF Core.
 
-**How concurrency is handled (optimistic concurrency):**
+Services return a `Result` (`Ok`, `Validation`, `Forbidden`, `NotFound`, `Conflict`) instead of
+throwing for expected outcomes; `ApiControllerBase` maps it to HTTP, so services never know about HTTP.
 
-- Every PostgreSQL row has a hidden system column, `xmin`, that changes on every write to the row.
-  `Equipment.Version` is mapped to `xmin` as a concurrency token, so no extra column is needed.
-- The take request loads the item (tracked), checks that it is `Available`, and saves it as `Taken`.
-  The check and the save run in one transaction.
-- EF Core adds the `xmin` value it read to the update:
-  `UPDATE "Equipment" SET ... WHERE "Id" = 1 AND xmin = 847`.
-  If the other guide saved first, `xmin` has changed, no row is updated, and EF Core throws
-  `DbUpdateConcurrencyException`.
-- The Data layer turns it into `ConcurrencyConflictException`, and the service returns
-  **409 Conflict** ("Another guide just took this item. Please try again.") instead of a second
-  successful take. The same token protects returning, editing and deleting an item.
-- Every conflict is written to the log at `Warning` level.
+## Budget rules
 
-To see it happen, run the API and then, from this folder:
+Budgets are always computed, never stored. Rates come from the `Budget` section of `appsettings.json`.
+
+| Pot | Owner | Formula (default rates) | Paid by meeting type |
+|-----|-------|-------------------------|----------------------|
+| Activity | Guide | flat 300 | `Activity` |
+| Birthday | Guide | 4 × her participants | `Birthday` |
+| Guide meetings | Coordinator | 20 × guides × 4 meetings | `GuidesMeeting` |
+| Annual | Coordinator | 35 × participants + 2 × 5 × participants | `SpecialEvent` |
+
+The coordinator can add money to a guide's pot (`Extra`) or move it from one of her own pots
+(`Transfer`); guide pots include the additions, coordinator pots subtract the transfers.
+
+**Deliberate change from the plan: split charging.** The plan charged a meeting to one pot only. At the
+coordinator's request, an `Activity` meeting over the activity pot can be completed from the birthday pot:
+the server first answers `409` with `shortfall` and `birthdayAvailable`; if the guide resends with
+`allowBirthdayDraw: true`, the rest of the activity pot is charged to Activity and only the shortfall to
+Birthday. No pot goes below zero; if both together are not enough, the meeting is refused.
+
+## Concurrency: the single projector
+
+The branch owns one projector (`Projector 1` in the demo data), and several guides may try to take it
+at the same moment. Exactly one of them must succeed.
+
+- `Equipment.Version` is mapped to PostgreSQL's system column `xmin` as the EF Core concurrency token,
+  so no extra column is needed.
+- `PUT /api/equipment/{id}/holder` loads the item tracked, checks it is `Available`, sets it `Taken`
+  and saves, in one transaction. EF Core issues
+  `UPDATE "Equipment" SET … WHERE "Id" = @id AND xmin = @originalXmin`.
+- If another guide committed first, `xmin` has changed, zero rows are updated and EF Core throws
+  `DbUpdateConcurrencyException`. The Data layer translates it to `ConcurrencyConflictException`,
+  and the API returns **409 Conflict** ("Another guide just took this item. Please try again.").
+- The same token protects returning, editing and deleting an item. Every conflict is logged at `Warning`.
+
+Result: one `204`, one `409`, one holder. To watch it happen, run the API and then:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\race-demo.ps1
 ```
 
-Two guides take the projector at the same moment in each round. One gets `204` and the other gets `409`.
-
-**A deliberate change from the plan: splitting a meeting between two budget pots.**
-The plan said that a meeting is charged in full to one pot, with no split. At the coordinator's request,
-an activity meeting that is over the activity pot can be completed from the birthday pot:
-
-- First the server answers `409` with the missing amount (`shortfall`) and the amount left in the
-  birthday pot (`birthdayAvailable`).
-- If the guide confirms (`allowBirthdayDraw: true`), what is left in the activity pot is charged to
-  Activity, and only the missing part is charged to Birthday.
-
-This way the activity pot is used up first and no pot goes below zero. If even both pots together are
-not enough, the meeting is refused. Every refused meeting is written to the log at `Warning` level.
-
 ## Running locally
 
-**Requirements:** .NET 10 SDK, Docker Desktop, and the EF Core tools
-(`dotnet tool install --global dotnet-ef`).
+**Requirements:** .NET 10 SDK, Docker Desktop, `dotnet-ef` (`dotnet tool install --global dotnet-ef`).
 
-1. **Start PostgreSQL in Docker.** Copy `.env.example` to `.env` and choose a database password, then run:
+1. **PostgreSQL.** Copy `.env.example` to `.env`, choose a password, then:
 
    ```powershell
    docker compose up -d
    ```
 
-   This starts PostgreSQL 16 in a container named `youthgroups-db` on port 5432, with a database named `YouthGroupsDb`.
+   Starts PostgreSQL 16 (`youthgroups-db`, port 5432, database `YouthGroupsDb`).
 
-2. **Set the secrets (User Secrets, never in `appsettings.json`).** Use the same password you chose in `.env`:
+2. **Secrets** (User Secrets, never in `appsettings*.json`), with the same password as in `.env`:
 
    ```powershell
    dotnet user-secrets set "ConnectionStrings:Default" "Host=localhost;Port=5432;Database=YouthGroupsDb;Username=postgres;Password=<your password>" --project YouthGroups.API
    dotnet user-secrets set "Jwt:Key" "<a random string of at least 32 characters>" --project YouthGroups.API
    ```
 
-   The server refuses to start if `Jwt:Key` is missing or shorter than 32 bytes.
+   The server refuses to start if `Jwt:Key` is missing or shorter than 32 bytes. Outside Development,
+   supply the same keys as environment variables (`ConnectionStrings__Default`, `Jwt__Key`).
 
-3. **Create the tables:**
+3. **Database:**
 
    ```powershell
    dotnet ef database update --project YouthGroups.Data --startup-project YouthGroups.API
    ```
 
-4. **Run the API** with the `http` (or `https`) launch profile, so the environment is `Development` and
-   User Secrets are loaded:
+4. **Run** with the `http` (or `https`) profile, so the environment is `Development`:
 
    ```powershell
    dotnet run --project YouthGroups.API --launch-profile http
    ```
 
-   In Visual Studio, choose the `http` profile and press F5.
+5. **Swagger:** <http://localhost:5178/swagger>. Log in with `POST /api/auth/login`, click
+   **Authorize** and paste the `token`.
 
-5. Open **Swagger** at <http://localhost:5178/swagger>. Log in with `POST /api/auth/login`, copy the
-   `token`, click **Authorize** and paste it.
+On the first Development run (`"SeedDemoData": true`), an empty database is filled with demo data:
+three users, ten participants, three equipment items and sample meetings. A database that already has
+users is never seeded.
 
-On the first run in Development (`"SeedDemoData": true` in `appsettings.Development.json`), the server
-fills the empty database with demo data: three users, ten participants, three equipment items and
-sample meetings. It never seeds a database that already has users.
+## Authentication & roles
 
-Logs are written to `YouthGroups.API/logs/yyyy-MM-dd.log` and to the console. Every line carries the
-request's `CorrelationId`, which the client also receives in the `X-Correlation-ID` response header.
+Every endpoint requires a valid JWT (`Authorization: Bearer <token>`) except `/api/auth/*`. The token
+carries the user id, email and role, and the API validates issuer, audience, signing key and lifetime
+(120 minutes). Role checks use `[Authorize(Roles = …)]`; ownership checks ("only her own") are in the
+Service layer and return `403`.
 
-## Demo users
+| Role | Can |
+|------|-----|
+| Coordinator | Manage guides and equipment, see every guide's budget and meetings, add or cancel budget additions, report `GuidesMeeting` and `SpecialEvent` meetings. |
+| Guide | Manage her own participants, report `Activity` and `Birthday` meetings, see her own budget, take and return equipment. |
 
-| Role        | Email                      | Password     | What she can do |
-|-------------|----------------------------|--------------|-----------------|
-| Coordinator | `sarah@youthgroups.local`  | `Coord!2026` | Manage guides and equipment, see every budget, add budget to guides, report guides meetings and special events |
-| Guide       | `rachel@youthgroups.local` | `Guide!2026` | Manage her participants, report activities and birthdays, take and return equipment |
-| Guide       | `shira@youthgroups.local`  | `Guide!2026` | Same as Rachel, with her own group (used as the second guide in the projector race) |
+There is exactly one coordinator: `POST /api/auth/register` creates her once and returns `409`
+afterwards. Guides are created by the coordinator.
 
-These accounts exist only in the local demo database. They are not real passwords.
+### Demo users (local Development seed only)
+
+| Role | Email | Password |
+|------|-------|----------|
+| Coordinator | `sarah@youthgroups.local` | `Coord!2026` |
+| Guide | `rachel@youthgroups.local` | `Guide!2026` |
+| Guide | `shira@youthgroups.local` | `Guide!2026` (second guide in the projector race) |
+
+These accounts exist only in the local demo database; they are not real passwords.
+
+## API
+
+| Method | Route | Access |
+|--------|-------|--------|
+| POST | `/api/auth/register` | public, once (the coordinator) |
+| POST | `/api/auth/login` | public |
+| GET | `/api/users?sort=&page=&pageSize=` | Coordinator |
+| POST / PUT / DELETE | `/api/users`, `/api/users/{id}` | Coordinator |
+| GET | `/api/users/{id}` | Coordinator, or the guide herself |
+| GET | `/api/users/{id}/overview`, `/api/users/me/overview` | Coordinator, or the guide herself |
+| GET / POST | `/api/users/{guideId}/participants` | Coordinator, or the guide herself |
+| GET / PUT / DELETE | `/api/participants/{id}` | Coordinator, or the participant's guide |
+| GET | `/api/meetings?userId=&type=&from=&to=&sort=&page=&pageSize=` | Coordinator (any user); a guide gets her own |
+| GET | `/api/meetings/{id}` | Coordinator, or the reporter |
+| POST | `/api/meetings` | any logged-in user (type must match role) |
+| PUT / DELETE | `/api/meetings/{id}` | the reporter only |
+| GET | `/api/users/{userId}/budget` | Coordinator, or the guide herself |
+| GET | `/api/budget/me` | any logged-in user |
+| GET | `/api/budget/summary` | Coordinator |
+| GET | `/api/budget-additions?guideId=` | Coordinator |
+| POST | `/api/users/{guideId}/budget-additions` | Coordinator |
+| DELETE | `/api/budget-additions/{id}` | Coordinator (`409` if already spent) |
+| GET | `/api/equipment?status=`, `/api/equipment/{id}` | any logged-in user |
+| POST / PUT / DELETE | `/api/equipment`, `/api/equipment/{id}` | Coordinator (`409` while on loan) |
+| PUT | `/api/equipment/{id}/holder` | any logged-in user (take) |
+| DELETE | `/api/equipment/{id}/holder` | the holder or the Coordinator (return) |
+
+## Errors
+
+Expected errors are returned as **ProblemDetails** (RFC 9457), with extra fields when relevant
+(e.g. `shortfall`, `birthdayAvailable`):
+
+```json
+{ "status": 409, "title": "Conflict", "detail": "…", "instance": "/api/meetings" }
+```
+
+| Status | When |
+|--------|------|
+| 400 | Validation failed, or the request body could not be read |
+| 401 | Missing or invalid token, wrong email or password |
+| 403 | Wrong role, or not her own resource |
+| 404 | Resource not found |
+| 409 | Business conflict (over budget, item on loan, coordinator exists) or concurrency conflict |
+| 500 | Unexpected error |
+
+Unexpected errors are caught by `ExceptionHandlingMiddleware` and returned as
+`{ "traceId", "status", "message" }`. Stack traces, SQL and EF Core details are never returned.
+
+## Logging
+
+`ILogger<T>` everywhere, with NLog underneath (`YouthGroups.API/nlog.config`): console and
+`YouthGroups.API/logs/yyyy-MM-dd.log`. `CorrelationIdMiddleware` gives every request a new id, adds it to
+every log line and returns it in the `X-Correlation-ID` header (and as `traceId` in a 500 answer).
+
+Levels: `Information` (requests, logins, main actions), `Warning` (equipment conflicts, refused meetings),
+`Error` (unhandled exceptions). Passwords, hashes, tokens, request bodies and headers are never logged.
+
+## Tests
+
+```powershell
+dotnet test YouthGroups.sln
+```
+
+`YouthGroups.Tests` uses xUnit, Moq and FluentAssertions (pinned to 7.x, the last version under the
+Apache 2.0 licence).
+
+- **Service unit tests** (repositories, unit of work and mapper mocked with Moq; no database):
+  taking an available item / a taken item (`409`), returning by a guide who is not the holder (`403`),
+  guide and coordinator budget formulas, and an over-budget activity meeting without the birthday draw
+  (`409` with `shortfall` and `birthdayAvailable`) and with it (split: the rest to Activity, the
+  shortfall to Birthday).
+- **Concurrency proof** (`EquipmentConcurrencyTests`): two independent `AppDbContext` instances read the
+  same `Available` projector and both mark it `Taken`. The first `SaveChanges` succeeds and the second
+  throws `DbUpdateConcurrencyException`; the database keeps the first take only. It runs against real
+  PostgreSQL (InMemory and SQLite have no `xmin`), in a `YouthGroupsDb_Test` database that is created,
+  migrated and dropped by the test fixture. The connection is read from the `YOUTHGROUPS_TEST_CONNECTION`
+  environment variable or, if it is not set, from the API's User Secrets (`ConnectionStrings:Default`),
+  with the database name replaced. The Docker container must be running.
+
+## Deliberate limitations
+
+- **One coordinator per installation.** Registration is open only until she exists; guides never self-register.
+- **No refresh tokens.** A token lives 120 minutes; the user logs in again afterwards.
+- **A meeting's type cannot change** after it is reported, since the type decides the pot. Delete and report again.
+- **The correlation id is always generated by the server**, never taken from the client, so no one can inject text into the logs.
+- **Budget amounts are not stored**; they are recalculated on every read, so they can never go out of sync.

@@ -11,6 +11,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "YouthGroups.Service", "Yout
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "YouthGroups.API", "YouthGroups.API\YouthGroups.API.csproj", "{3B6CFB3B-F877-4D7F-8F21-F863C63883EA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "YouthGroups.Tests", "YouthGroups.Tests\YouthGroups.Tests.csproj", "{D7A05CE6-C23E-495D-A4BC-89AD603A17C9}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -69,6 +71,18 @@ Global
 		{3B6CFB3B-F877-4D7F-8F21-F863C63883EA}.Release|x64.Build.0 = Release|Any CPU
 		{3B6CFB3B-F877-4D7F-8F21-F863C63883EA}.Release|x86.ActiveCfg = Release|Any CPU
 		{3B6CFB3B-F877-4D7F-8F21-F863C63883EA}.Release|x86.Build.0 = Release|Any CPU
+		{D7A05CE6-C23E-495D-A4BC-89AD603A17C9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D7A05CE6-C23E-495D-A4BC-89AD603A17C9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D7A05CE6-C23E-495D-A4BC-89AD603A17C9}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{D7A05CE6-C23E-495D-A4BC-89AD603A17C9}.Debug|x64.Build.0 = Debug|Any CPU
+		{D7A05CE6-C23E-495D-A4BC-89AD603A17C9}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{D7A05CE6-C23E-495D-A4BC-89AD603A17C9}.Debug|x86.Build.0 = Debug|Any CPU
+		{D7A05CE6-C23E-495D-A4BC-89AD603A17C9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D7A05CE6-C23E-495D-A4BC-89AD603A17C9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D7A05CE6-C23E-495D-A4BC-89AD603A17C9}.Release|x64.ActiveCfg = Release|Any CPU
+		{D7A05CE6-C23E-495D-A4BC-89AD603A17C9}.Release|x64.Build.0 = Release|Any CPU
+		{D7A05CE6-C23E-495D-A4BC-89AD603A17C9}.Release|x86.ActiveCfg = Release|Any CPU
+		{D7A05CE6-C23E-495D-A4BC-89AD603A17C9}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
