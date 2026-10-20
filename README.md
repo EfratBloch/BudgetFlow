@@ -59,7 +59,8 @@ at the same moment. Exactly one of them must succeed.
   and the API returns **409 Conflict** ("Another guide just took this item. Please try again.").
 - The same token protects returning, editing and deleting an item. Every conflict is logged at `Warning`.
 
-Result: one `204`, one `409`, one holder. To watch it happen, run the API and then:
+Result: one `204`, one `409`, one holder. To watch it happen, run the API with the demo data
+(`SeedDemoData` on, see below) and then:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\race-demo.ps1
@@ -99,9 +100,10 @@ powershell -ExecutionPolicy Bypass -File scripts\race-demo.ps1
 4. **Swagger:** <http://localhost:5178/swagger>. Log in with `POST /api/auth/login`, click
    **Authorize** and paste the `token`.
 
-When `SeedDemoData` is `true` (it is in `appsettings.Development.json`), an empty database is filled with
-demo data: three users, ten participants, three equipment items and sample meetings. A database that
-already has users is never seeded.
+The database starts empty: open the client (or `POST /api/auth/register`) to register the coordinator,
+who then adds the guides. For a ready-made demo, set `"SeedDemoData": true` in
+`appsettings.Development.json`: an empty database is then filled with three users, ten participants,
+three equipment items and sample meetings (a database that already has users is never seeded).
 
 ## Deploying to Render
 
@@ -132,7 +134,7 @@ Service layer and return `403`.
 There is exactly one coordinator: `POST /api/auth/register` creates her once and returns `409`
 afterwards. Guides are created by the coordinator.
 
-### Demo users (local Development seed only)
+### Demo users (only when `SeedDemoData` is `true`)
 
 | Role | Email | Password |
 |------|-------|----------|
