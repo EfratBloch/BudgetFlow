@@ -22,10 +22,6 @@ public class ParticipantRepository : Repository<Participant>, IParticipantReposi
     public Task<int> CountAllAsync(CancellationToken ct)
         => Set.CountAsync(ct);
 
-    public Task<bool> NationalIdExistsAsync(string nationalId, int? excludeParticipantId, CancellationToken ct)
-        => Set.AnyAsync(p => p.NationalId == nationalId
-                             && (excludeParticipantId == null || p.Id != excludeParticipantId), ct);
-
     // Tracked, because the result is attached to a meeting's attendance
     public async Task<IReadOnlyList<Participant>> GetByIdsForUpdateAsync(IReadOnlyCollection<int> ids, CancellationToken ct)
         => await Set.Where(p => ids.Contains(p.Id)).ToListAsync(ct);

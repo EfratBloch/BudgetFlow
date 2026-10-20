@@ -24,6 +24,7 @@ public class MeetingServiceTests
 
     private readonly Mock<IMeetingRepository> _meetings = new();
     private readonly Mock<IParticipantRepository> _participants = new();
+    private readonly Mock<IEquipmentRepository> _equipment = new();
     private readonly Mock<IUnitOfWork> _unitOfWork = new();
     private readonly Mock<ITransaction> _transaction = new();
     private readonly MeetingService _service;
@@ -57,7 +58,7 @@ public class MeetingServiceTests
         var pots = new BudgetPots(Mock.Of<IUserRepository>(), _participants.Object, _meetings.Object,
             additions.Object, TestBudget.Calculator);
 
-        _service = new MeetingService(_meetings.Object, _participants.Object, _unitOfWork.Object, pots,
+        _service = new MeetingService(_meetings.Object, _participants.Object, _equipment.Object, Mock.Of<IUserRepository>(), _unitOfWork.Object, pots,
             mapper.Object, NullLogger<MeetingService>.Instance);
     }
 
@@ -103,5 +104,60 @@ public class MeetingServiceTests
         _added.Expenses.Should().ContainSingle(e => e.BudgetSource == BudgetSource.Birthday)
             .Which.Amount.Should().Be(30m);
         _added.Expenses.Sum(e => e.Amount).Should().Be(80m);
+    }
+
+    [Fact]
+    public async Task Create_ActivityWithStoreItem_RecordsTheItemWithoutTakingIt()
+    {
+        const int ProjectorId = 5;
+        _equipment.Setup(e => e.GetByIdAsync(ProjectorId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Equipment { Id = ProjectorId, Name = "Projector", Status = EquipmentStatus.Taken });
+
+        var dto = ActivityMeeting(allowBirthdayDraw: true);
+        dto.EquipmentId = ProjectorId;
+
+        var result = await _service.CreateAsync(dto, _guide, CancellationToken.None);
+
+        result.Status.Should().Be(ResultStatus.Ok);
+        _added!.EquipmentId.Should().Be(ProjectorId);
+        // Only read - the item is never loaded for update, so its status and holder stay as they are
+        _equipment.Verify(e => e.GetForUpdateAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Create_BirthdayWithStoreItem_ReturnsValidation()
+    {
+        var dto = new MeetingCreateDto
+        {
+            Type = MeetingType.Birthday,
+            Date = DateTime.UtcNow.AddDays(-1),
+            Program = "Birthday",
+            ParticipantIds = new List<int> { ParticipantId },
+            EquipmentId = 5
+        };
+
+        var result = await _service.CreateAsync(dto, _guide, CancellationToken.None);
+
+        result.Status.Should().Be(ResultStatus.Validation);
+        _meetings.Verify(m => m.AddAsync(It.IsAny<Meeting>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Create_GuidesMeetingWithParticipants_ReturnsValidation()
+    {
+        var coordinator = new CurrentUser(1, UserRole.Coordinator);
+        var dto = new MeetingCreateDto
+        {
+            Type = MeetingType.GuidesMeeting,
+            Date = DateTime.UtcNow.AddDays(-1),
+            Program = "Monthly guides meeting",
+            ParticipantIds = new List<int> { ParticipantId }
+        };
+
+        var result = await _service.CreateAsync(dto, coordinator, CancellationToken.None);
+
+        // A guides meeting is attended by guides, never by participants
+        result.Status.Should().Be(ResultStatus.Validation);
+        _meetings.Verify(m => m.AddAsync(It.IsAny<Meeting>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

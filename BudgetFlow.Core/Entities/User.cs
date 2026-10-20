@@ -11,7 +11,6 @@ public class User
     public UserRole Role { get; set; }
     public string FullName { get; set; } = string.Empty;
     public string Phone { get; set; } = string.Empty;
-    public string NationalId { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; } // UTC
 
     // A guide's own participants (empty for the coordinator)
@@ -19,4 +18,7 @@ public class User
 
     // Meetings this user reported
     public ICollection<Meeting> Meetings { get; set; } = new List<Meeting>();
+
+    // Guides meetings this guide attended (empty for the coordinator)
+    public ICollection<Meeting> AttendedMeetings { get; set; } = new List<Meeting>();
 }

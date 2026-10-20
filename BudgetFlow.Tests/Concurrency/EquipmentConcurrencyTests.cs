@@ -62,8 +62,8 @@ public class EquipmentConcurrencyTests : IClassFixture<PostgresTestDatabase>
     {
         await using var context = _database.CreateContext();
 
-        var rachel = NewGuide("rachel@test.local", "Rachel", "111111111");
-        var shira = NewGuide("shira@test.local", "Shira", "222222222");
+        var rachel = NewGuide("rachel@test.local", "Rachel");
+        var shira = NewGuide("shira@test.local", "Shira");
         var projector = new Equipment { Name = "Projector 1", Status = EquipmentStatus.Available };
 
         context.Users.AddRange(rachel, shira);
@@ -73,14 +73,13 @@ public class EquipmentConcurrencyTests : IClassFixture<PostgresTestDatabase>
         return (rachel.Id, shira.Id, projector.Id);
     }
 
-    private static User NewGuide(string email, string name, string nationalId) => new()
+    private static User NewGuide(string email, string name) => new()
     {
         Email = email,
         PasswordHash = "not-a-real-hash",
         Role = UserRole.Guide,
         FullName = name,
         Phone = "0500000000",
-        NationalId = nationalId,
         CreatedAt = DateTime.UtcNow
     };
 }

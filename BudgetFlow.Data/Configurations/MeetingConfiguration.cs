@@ -25,6 +25,14 @@ public class MeetingConfiguration : IEntityTypeConfiguration<Meeting>
             .HasForeignKey(m => m.UserId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        // Optional: the store item used in the meeting.
+        // SetNull: deleting the item keeps the meeting, without the item.
+        builder.HasOne(m => m.Equipment)
+            .WithMany()
+            .HasForeignKey(m => m.EquipmentId)
+            .IsRequired(false)
+            .OnDelete(DeleteBehavior.SetNull);
+
         // One-to-many: a meeting has many expenses.
         // Cascade: deleting a meeting deletes its expenses, and the balance grows back by itself.
         builder.HasMany(m => m.Expenses)
@@ -45,5 +53,17 @@ public class MeetingConfiguration : IEntityTypeConfiguration<Meeting>
                 meeting => meeting.HasOne<Meeting>().WithMany()
                     .HasForeignKey("MeetingId").OnDelete(DeleteBehavior.Cascade),
                 join => join.HasKey("MeetingId", "ParticipantId"));
+
+        // Many-to-many: the guides who attended a guides meeting (join table MeetingGuideAttendance).
+        // Like MeetingAttendance, a row goes away together with either side.
+        builder.HasMany(m => m.Guides)
+            .WithMany(u => u.AttendedMeetings)
+            .UsingEntity<Dictionary<string, object>>(
+                "MeetingGuideAttendance",
+                guide => guide.HasOne<User>().WithMany()
+                    .HasForeignKey("GuideId").OnDelete(DeleteBehavior.Cascade),
+                meeting => meeting.HasOne<Meeting>().WithMany()
+                    .HasForeignKey("MeetingId").OnDelete(DeleteBehavior.Cascade),
+                join => join.HasKey("MeetingId", "GuideId"));
     }
 }

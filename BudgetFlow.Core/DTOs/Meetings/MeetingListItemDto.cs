@@ -11,6 +11,7 @@ public class MeetingListItemDto
     public DateTime Date { get; set; }
     public MeetingType Type { get; set; }
     public string Program { get; set; } = string.Empty;
+    public string? EquipmentName { get; set; }
     public int ParticipantCount { get; set; }
     public decimal TotalExpenses { get; set; }
 }

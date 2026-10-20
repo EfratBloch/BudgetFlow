@@ -65,9 +65,6 @@ public class UserService : IUserService
         if (await _users.EmailExistsAsync(email, null, ct))
             return Result<UserDto>.Conflict("This email is already in use.");
 
-        if (await _users.NationalIdExistsAsync(dto.NationalId, null, ct))
-            return Result<UserDto>.Conflict("This national ID is already in use.");
-
         var guide = new User
         {
             Email = email,
@@ -75,7 +72,6 @@ public class UserService : IUserService
             Role = UserRole.Guide,
             FullName = dto.FullName.Trim(),
             Phone = dto.Phone.Trim(),
-            NationalId = dto.NationalId,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -94,17 +90,13 @@ public class UserService : IUserService
 
         var email = Email.Normalize(dto.Email);
 
-        // excludeUserId: keeping her own email / national id is not a duplicate
+        // excludeUserId: keeping her own email is not a duplicate
         if (await _users.EmailExistsAsync(email, id, ct))
             return Result.Conflict("This email is already in use.");
-
-        if (await _users.NationalIdExistsAsync(dto.NationalId, id, ct))
-            return Result.Conflict("This national ID is already in use.");
 
         guide.Email = email;
         guide.FullName = dto.FullName.Trim();
         guide.Phone = dto.Phone.Trim();
-        guide.NationalId = dto.NationalId;
 
         await _unitOfWork.SaveChangesAsync(ct);
         return Result.Ok();

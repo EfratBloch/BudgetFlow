@@ -31,6 +31,8 @@ public class MeetingService : IMeetingService
 
     private readonly IMeetingRepository _meetings;
     private readonly IParticipantRepository _participants;
+    private readonly IEquipmentRepository _equipment;
+    private readonly IUserRepository _users;
     private readonly IUnitOfWork _unitOfWork;
     private readonly BudgetPots _pots;
     private readonly IMapper _mapper;
@@ -39,6 +41,8 @@ public class MeetingService : IMeetingService
     public MeetingService(
         IMeetingRepository meetings,
         IParticipantRepository participants,
+        IEquipmentRepository equipment,
+        IUserRepository users,
         IUnitOfWork unitOfWork,
         BudgetPots pots,
         IMapper mapper,
@@ -46,6 +50,8 @@ public class MeetingService : IMeetingService
     {
         _meetings = meetings;
         _participants = participants;
+        _equipment = equipment;
+        _users = users;
         _unitOfWork = unitOfWork;
         _pots = pots;
         _mapper = mapper;
@@ -62,6 +68,7 @@ public class MeetingService : IMeetingService
         var filter = new MeetingQueryDto
         {
             UserId = caller.IsCoordinator ? query.UserId : caller.UserId,
+            GuidesOnly = caller.IsCoordinator && query.GuidesOnly,
             Type = query.Type,
             From = query.From,
             To = query.To,
@@ -97,17 +104,29 @@ public class MeetingService : IMeetingService
         if (check.Error is not null)
             return Fail<MeetingDto>(check.Error);
 
+        var equipmentError = await CheckEquipmentAsync(type, dto.EquipmentId, ct);
+        if (equipmentError is not null)
+            return Fail<MeetingDto>(equipmentError);
+
+        var guides = await CheckGuidesAsync(type, dto.ParticipantIds, dto.GuideIds, ct);
+        if (guides.Error is not null)
+            return Fail<MeetingDto>(guides.Error);
+
         var meeting = new Meeting
         {
             UserId = caller.UserId, // from the JWT, never from the body
             Type = type,
             Date = check.Date,
             Program = dto.Program.Trim(),
-            Notes = dto.Notes?.Trim()
+            Notes = dto.Notes?.Trim(),
+            EquipmentId = dto.EquipmentId
         };
 
         foreach (var participant in check.Participants)
             meeting.Participants.Add(participant);
+
+        foreach (var guide in guides.Guides)
+            meeting.Guides.Add(guide);
 
         foreach (var expense in NewExpenses(dto.Expenses, check))
             meeting.Expenses.Add(expense);
@@ -140,9 +159,18 @@ public class MeetingService : IMeetingService
         if (check.Error is not null)
             return check.Error;
 
+        var equipmentError = await CheckEquipmentAsync(meeting.Type, dto.EquipmentId, ct);
+        if (equipmentError is not null)
+            return equipmentError;
+
+        var guides = await CheckGuidesAsync(meeting.Type, dto.ParticipantIds, dto.GuideIds, ct);
+        if (guides.Error is not null)
+            return guides.Error;
+
         meeting.Date = check.Date;
         meeting.Program = dto.Program.Trim();
         meeting.Notes = dto.Notes?.Trim();
+        meeting.EquipmentId = dto.EquipmentId;
 
         // Expenses are replaced as a whole: removed ones are orphans, which EF deletes
         meeting.Expenses.Clear();
@@ -152,6 +180,10 @@ public class MeetingService : IMeetingService
         meeting.Participants.Clear();
         foreach (var participant in check.Participants)
             meeting.Participants.Add(participant);
+
+        meeting.Guides.Clear();
+        foreach (var guide in guides.Guides)
+            meeting.Guides.Add(guide);
 
         await _unitOfWork.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
@@ -292,6 +324,44 @@ public class MeetingService : IMeetingService
         }
 
         return result;
+    }
+
+    // The store item is only a record of what was used: it must exist and belong to an
+    // Activity meeting, but its status and holder are not checked or changed
+    private async Task<Result?> CheckEquipmentAsync(MeetingType type, int? equipmentId, CancellationToken ct)
+    {
+        if (equipmentId is null)
+            return null;
+
+        if (type != MeetingType.Activity)
+            return Result.Validation("A store item can only be recorded on an activity meeting.");
+
+        if (await _equipment.GetByIdAsync(equipmentId.Value, ct) is null)
+            return Result.Validation("The store item does not exist.");
+
+        return null;
+    }
+
+    // A guides meeting is attended by guides, not participants; every other type is attended
+    // by participants only. Returns the tracked guides to attach to the meeting.
+    private async Task<(Result? Error, IReadOnlyList<User> Guides)> CheckGuidesAsync(
+        MeetingType type, IReadOnlyCollection<int> participantIds, IReadOnlyCollection<int>? guideIds, CancellationToken ct)
+    {
+        var ids = (guideIds ?? Array.Empty<int>()).Distinct().ToList();
+
+        if (type != MeetingType.GuidesMeeting)
+            return ids.Count == 0
+                ? (null, Array.Empty<User>())
+                : (Result.Validation("Only a guides meeting is attended by guides."), Array.Empty<User>());
+
+        if (participantIds.Count > 0)
+            return (Result.Validation("A guides meeting is attended by guides, not participants."), Array.Empty<User>());
+
+        var guides = await _users.GetGuidesByIdsForUpdateAsync(ids, ct);
+        if (guides.Count != ids.Count)
+            return (Result.Validation("One or more guides do not exist."), Array.Empty<User>());
+
+        return (null, guides);
     }
 
     // A refused meeting is a Warning in the log: handled (the caller got a 409), but worth seeing

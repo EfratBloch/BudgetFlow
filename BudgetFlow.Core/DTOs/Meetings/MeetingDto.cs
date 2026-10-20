@@ -12,7 +12,10 @@ public class MeetingDto
     public MeetingType Type { get; set; }
     public string Program { get; set; } = string.Empty;
     public string? Notes { get; set; }
+    public int? EquipmentId { get; set; }
+    public string? EquipmentName { get; set; }
     public decimal TotalExpenses { get; set; }
     public List<ExpenseDto> Expenses { get; set; } = new();
     public List<ParticipantDto> Participants { get; set; } = new();
+    public List<MeetingGuideDto> Guides { get; set; } = new();
 }

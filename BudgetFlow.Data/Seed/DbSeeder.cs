@@ -33,15 +33,15 @@ public class DbSeeder
         var now = DateTime.UtcNow;
 
         var sarah = NewUser(CoordinatorEmail, CoordinatorPassword, UserRole.Coordinator,
-            "Sarah Levi", "050-1000001", "300000001", now);
+            "Sarah Levi", "050-1000001", now);
         var rachel = NewUser(GuideOneEmail, GuidePassword, UserRole.Guide,
-            "Rachel Cohen", "050-1000002", "300000002", now);
+            "Rachel Cohen", "050-1000002", now);
         var shira = NewUser(GuideTwoEmail, GuidePassword, UserRole.Guide,
-            "Shira Mizrahi", "050-1000003", "300000003", now);
+            "Shira Mizrahi", "050-1000003", now);
 
         // Five participants per guide
-        var rachelGroup = NewParticipants(rachel, "Rachel's", 400000001);
-        var shiraGroup = NewParticipants(shira, "Shira's", 400000101);
+        var rachelGroup = NewParticipants(rachel, "Rachel's", 1);
+        var shiraGroup = NewParticipants(shira, "Shira's", 11);
 
         _context.Users.AddRange(sarah, rachel, shira);
         _context.Participants.AddRange(rachelGroup);
@@ -73,26 +73,24 @@ public class DbSeeder
     }
 
     private User NewUser(string email, string password, UserRole role,
-        string fullName, string phone, string nationalId, DateTime createdAt) => new()
+        string fullName, string phone, DateTime createdAt) => new()
     {
         Email = email,
         PasswordHash = _passwordHasher.Hash(password), // never the plain password
         Role = role,
         FullName = fullName,
         Phone = phone,
-        NationalId = nationalId,
         CreatedAt = createdAt
     };
 
-    private static List<Participant> NewParticipants(User guide, string groupName, int firstNationalId)
+    private static List<Participant> NewParticipants(User guide, string groupName, int firstPhone)
     {
         string[] names = { "Noa", "Maya", "Tamar", "Yael", "Adi" };
 
         return names.Select((name, i) => new Participant
         {
             FullName = $"{name} ({groupName} group)",
-            NationalId = (firstNationalId + i).ToString(),
-            Phone = $"052-20000{firstNationalId % 1000 + i:00}",
+            Phone = $"052-20000{firstPhone + i:00}",
             Guide = guide
         }).ToList();
     }

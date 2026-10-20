@@ -7,9 +7,8 @@ public interface IUserRepository : IRepository<User>
 {
     Task<User?> GetByEmailAsync(string email, CancellationToken ct);
 
-    // excludeUserId lets an update keep its own email / national id
+    // excludeUserId lets an update keep its own email
     Task<bool> EmailExistsAsync(string email, int? excludeUserId, CancellationToken ct);
-    Task<bool> NationalIdExistsAsync(string nationalId, int? excludeUserId, CancellationToken ct);
 
     Task<bool> CoordinatorExistsAsync(CancellationToken ct);
     Task<User?> GetCoordinatorAsync(CancellationToken ct);
@@ -18,6 +17,9 @@ public interface IUserRepository : IRepository<User>
     Task<PagedResult<User>> GetGuidesPagedAsync(string? sort, int page, int pageSize, CancellationToken ct);
 
     Task<int> CountGuidesAsync(CancellationToken ct);
+
+    // Tracked guides (never the coordinator) - attached to a guides meeting as its attendance
+    Task<IReadOnlyList<User>> GetGuidesByIdsForUpdateAsync(IReadOnlyCollection<int> ids, CancellationToken ct);
 
     // True when the user still has participants, reported meetings, a taken item or budget additions.
     // Those foreign keys are Restrict, so such a user cannot be deleted.

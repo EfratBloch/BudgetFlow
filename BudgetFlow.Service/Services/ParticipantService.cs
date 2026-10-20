@@ -13,7 +13,6 @@ public class ParticipantService : IParticipantService
 {
     private const string NotYours = "A guide may only manage her own participants.";
     private const string ParticipantNotFound = "Participant not found.";
-    private const string DuplicateNationalId = "A participant with this national ID already exists.";
 
     private readonly IParticipantRepository _participants;
     private readonly IUserRepository _users;
@@ -68,13 +67,9 @@ public class ParticipantService : IParticipantService
         if (!await IsGuideAsync(guideId, ct))
             return Result<ParticipantDto>.NotFound("Guide not found.");
 
-        if (await _participants.NationalIdExistsAsync(dto.NationalId, null, ct))
-            return Result<ParticipantDto>.Conflict(DuplicateNationalId);
-
         var participant = new Participant
         {
             FullName = dto.FullName.Trim(),
-            NationalId = dto.NationalId,
             Phone = dto.Phone.Trim(),
             GuideId = guideId
         };
@@ -95,12 +90,8 @@ public class ParticipantService : IParticipantService
         if (!CanAccess(participant.GuideId, caller))
             return Result.Forbidden(NotYours);
 
-        if (await _participants.NationalIdExistsAsync(dto.NationalId, id, ct))
-            return Result.Conflict(DuplicateNationalId);
-
         // GuideId is not in the DTO - a participant is never moved to another guide here
         participant.FullName = dto.FullName.Trim();
-        participant.NationalId = dto.NationalId;
         participant.Phone = dto.Phone.Trim();
 
         await _unitOfWork.SaveChangesAsync(ct);

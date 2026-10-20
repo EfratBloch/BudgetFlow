@@ -18,9 +18,6 @@ public class UserRepository : Repository<User>, IUserRepository
     public Task<bool> EmailExistsAsync(string email, int? excludeUserId, CancellationToken ct)
         => Set.AnyAsync(u => u.Email == email && (excludeUserId == null || u.Id != excludeUserId), ct);
 
-    public Task<bool> NationalIdExistsAsync(string nationalId, int? excludeUserId, CancellationToken ct)
-        => Set.AnyAsync(u => u.NationalId == nationalId && (excludeUserId == null || u.Id != excludeUserId), ct);
-
     public Task<bool> CoordinatorExistsAsync(CancellationToken ct)
         => Set.AnyAsync(u => u.Role == UserRole.Coordinator, ct);
 
@@ -58,6 +55,9 @@ public class UserRepository : Repository<User>, IUserRepository
 
     public Task<int> CountGuidesAsync(CancellationToken ct)
         => Set.CountAsync(u => u.Role == UserRole.Guide, ct);
+
+    public async Task<IReadOnlyList<User>> GetGuidesByIdsForUpdateAsync(IReadOnlyCollection<int> ids, CancellationToken ct)
+        => await Set.Where(u => u.Role == UserRole.Guide && ids.Contains(u.Id)).ToListAsync(ct);
 
     // One query: four EXISTS subqueries combined with OR
     public Task<bool> HasLinkedDataAsync(int userId, CancellationToken ct)

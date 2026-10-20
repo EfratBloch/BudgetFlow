@@ -11,6 +11,7 @@ public class MappingProfile : Profile
     {
         CreateMap<User, UserDto>();
         CreateMap<Participant, ParticipantDto>();
+        CreateMap<User, MeetingGuideDto>();
         CreateMap<Expense, ExpenseDto>();
 
         // Expects Guide loaded (IBudgetAdditionRepository.GetAllAsync)
@@ -24,6 +25,7 @@ public class MappingProfile : Profile
         // Expects User, Expenses and Participants loaded (IMeetingRepository.GetWithDetailsAsync)
         CreateMap<Meeting, MeetingDto>()
             .ForMember(d => d.ReporterName, o => o.MapFrom(m => m.User.FullName))
+            .ForMember(d => d.EquipmentName, o => o.MapFrom(m => m.Equipment != null ? m.Equipment.Name : null))
             .ForMember(d => d.TotalExpenses, o => o.MapFrom(m => m.Expenses.Sum(e => e.Amount)));
     }
 }

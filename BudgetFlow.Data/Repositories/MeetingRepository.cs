@@ -19,6 +19,8 @@ public class MeetingRepository : Repository<Meeting>, IMeetingRepository
 
         if (q.UserId.HasValue)
             query = query.Where(m => m.UserId == q.UserId.Value);
+        if (q.GuidesOnly)
+            query = query.Where(m => m.User.Role == UserRole.Guide);
         if (q.Type.HasValue)
             query = query.Where(m => m.Type == q.Type.Value);
         if (q.From.HasValue)
@@ -51,7 +53,8 @@ public class MeetingRepository : Repository<Meeting>, IMeetingRepository
                 Date = m.Date,
                 Type = m.Type,
                 Program = m.Program,
-                ParticipantCount = m.Participants.Count(),
+                EquipmentName = m.Equipment != null ? m.Equipment.Name : null,
+                ParticipantCount = m.Participants.Count() + m.Guides.Count(),
                 TotalExpenses = m.Expenses.Sum(e => (decimal?)e.Amount) ?? 0
             })
             .ToListAsync(ct);
@@ -68,14 +71,17 @@ public class MeetingRepository : Repository<Meeting>, IMeetingRepository
     public Task<Meeting?> GetWithDetailsAsync(int id, CancellationToken ct)
         => Set.AsNoTracking()
             .Include(m => m.User)
+            .Include(m => m.Equipment)
             .Include(m => m.Expenses)
             .Include(m => m.Participants)
+            .Include(m => m.Guides)
             .FirstOrDefaultAsync(m => m.Id == id, ct);
 
     public Task<Meeting?> GetWithDetailsForUpdateAsync(int id, CancellationToken ct)
         => Set
             .Include(m => m.Expenses)
             .Include(m => m.Participants)
+            .Include(m => m.Guides)
             .FirstOrDefaultAsync(m => m.Id == id, ct);
 
     // SELECT "BudgetSource", SUM("Amount") ... GROUP BY "BudgetSource"

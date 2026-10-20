@@ -51,9 +51,6 @@ public class AuthService : IAuthService
         if (await _users.EmailExistsAsync(email, null, ct))
             return Result<UserDto>.Conflict("This email is already in use.");
 
-        if (await _users.NationalIdExistsAsync(dto.NationalId, null, ct))
-            return Result<UserDto>.Conflict("This national ID is already in use.");
-
         var user = new User
         {
             Email = email,
@@ -61,7 +58,6 @@ public class AuthService : IAuthService
             Role = UserRole.Coordinator,
             FullName = dto.FullName.Trim(),
             Phone = dto.Phone.Trim(),
-            NationalId = dto.NationalId,
             CreatedAt = DateTime.UtcNow
         };
 

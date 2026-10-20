@@ -9,6 +9,9 @@ public class MeetingQueryDto
     // Coordinator only - a guide who sends it gets 403 (checked in the Service layer)
     public int? UserId { get; set; }
 
+    // Coordinator only: true = only meetings reported by guides
+    public bool GuidesOnly { get; set; }
+
     public MeetingType? Type { get; set; }
     public DateTime? From { get; set; }
     public DateTime? To { get; set; }

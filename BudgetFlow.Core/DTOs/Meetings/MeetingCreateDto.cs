@@ -20,8 +20,14 @@ public class MeetingCreateDto
     [StringLength(1000)]
     public string? Notes { get; set; }
 
+    // Optional, Activity meetings only: the store item used. Does not take the item.
+    public int? EquipmentId { get; set; }
+
     [Required]
     public List<int> ParticipantIds { get; set; } = new();
+
+    // Guides meetings only: the guides who attended (participants stay empty)
+    public List<int> GuideIds { get; set; } = new();
 
     [Required]
     public List<ExpenseCreateDto> Expenses { get; set; } = new();

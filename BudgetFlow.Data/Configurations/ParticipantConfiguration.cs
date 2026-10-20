@@ -13,9 +13,6 @@ public class ParticipantConfiguration : IEntityTypeConfiguration<Participant>
 
         builder.Property(p => p.FullName).IsRequired().HasMaxLength(100);
         builder.Property(p => p.Phone).IsRequired().HasMaxLength(20);
-        builder.Property(p => p.NationalId).IsRequired().HasMaxLength(9).IsFixedLength();
-
-        builder.HasIndex(p => p.NationalId).IsUnique();
 
         // One-to-many: a guide has many participants.
         // Restrict: a guide who still has participants cannot be deleted.
